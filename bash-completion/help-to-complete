@@ -1,0 +1,46 @@
+# help-to-complete completion
+
+_help_to_complete() {
+    local cur prev words cword split
+    _init_completion || return
+
+    # default completion if parameter looks like a path
+    if [[ "${cur}" == @(*/|[.~])* ]]; then
+        _filedir
+        return
+    fi
+
+    case "${prev}" in
+        -c|--clobber|-h|--help|-l|--license|-v|--verbose|-V|--version)
+            return
+        ;;
+        --completion-dir)
+            _filedir
+            return
+        ;;
+        --executable)
+            words=(words[0] "${cur}")
+            cword=1
+            _command
+            return
+        ;;
+        --help-option)
+            COMPREPLY=( $( compgen -W '--help --usage' -- ${cur} ) )
+            return
+        ;;
+        --parameter-pattern)
+            COMPREPLY=( $( compgen -W '^(-\{1,2}[a-zA-Z])\{1,}' -- ${cur} ) )
+            return
+        ;;
+    esac
+
+    # Parse help for any un-matched parameters
+    if [[ ${cur} == -* ]]; then
+        COMPREPLY=( $( compgen -W '$( _parse_help "${1}" )' -- "${cur}" ) )
+        [[ ${COMPREPLY} == *= ]] && compopt -o nospace
+        return
+    fi
+} &&
+complete -F _help_to_complete help-to-complete
+
+# ex: filetype=bash

@@ -1,0 +1,357 @@
+#!/usr/bin/env bash
+
+
+## Find true directory this script resides in
+__SOURCE__="${BASH_SOURCE[0]}"
+while [[ -h "${__SOURCE__}" ]]; do
+    __SOURCE__="$(find "${__SOURCE__}" -type l -ls | sed -n 's@^.* -> \(.*\)@\1@p')"
+done
+__NAME__="${__SOURCE__##*/}"
+__DIR__="$(cd -P "$(dirname "${__SOURCE__}")" && pwd)"
+__AUTHOR__='S0AndS0'
+__DESCRIPTION__='Builds tab-completion configurations from --help output'
+
+
+set -Ee -o functrace
+
+
+## Provides: failure
+# shellcheck source=shared_functions/modules/trap-failure/failure.sh
+source "${__DIR__}/shared_functions/modules/trap-failure/failure.sh"
+trap 'failure "LINENO" "BASH_LINENO" "${BASH_COMMAND}" "${?}"' ERR
+
+## Provides: argument_parser <arg-array-reference> <acceptable-arg-reference>
+# shellcheck source=shared_functions/modules/argument-parser/argument-parser.sh
+source "${__DIR__}/shared_functions/modules/argument-parser/argument-parser.sh"
+
+## Provides: __license__ <description> <author>
+# shellcheck source=shared_functions/license.sh
+source "${__DIR__}/shared_functions/license.sh"
+
+
+## Variable defaults
+_parameter_pattern='^(-{1,2}[a-zA-Z]){1,}'
+
+if (( EUID )); then
+    _completion_dir="${BASH_COMPLETION_USER_DIR:-${HOME}/.local/share/bash-completion}"
+fi
+
+if ! (( "${#_completion_dir}" )) || ! [[ -d "${_completion_dir}" ]]; then
+    _completion_dir="$(pkg-config --variable=completionsdir bash-completion)"
+fi
+
+
+__usage__() {
+    local _message="${1}"
+    cat <<EOF
+${__DESCRIPTION__}
+
+
+Usage: ${__NAME__} [OPTIONS]...
+
+
+Options:
+-c    --clobber
+    Overwrites preexisting completion configuration
+
+-h    --help
+    Prints this message and exits
+
+-l    --license
+    Prints copyright for this script and exits
+
+-v    --verbose
+    Prints messages about actions
+
+-V    --version
+    Prints version for this script and exits
+
+--completion-dir "${_completion_dir}"
+    Directory to that completion configuration will be saved to
+
+--executable "${_executable:-help-to-complete}"
+    {Required} Name of executable to parse help documentation from
+
+--help-option "${_help_option:---help|--usage}"
+    Option executable uses to print help/usage
+
+--parameter-pattern "${_parameter_pattern}"
+    Regular expression for parsing parameters from help/usage output
+
+
+Examples:
+    ${__NAME__} --executable ${__NAME__}
+EOF
+
+    if (( "${#_message}" )); then
+        printf >&2 '\n\n## Error: %s\n' "${_message}"
+        exit 1
+    fi
+}
+
+
+__version__() {
+    local _version_number
+    _version_number="$(git tag --list v* | tail -n1)"
+    _version_number="${_version_number:-v0.0.1}"
+    _version_number="${_version_number//[^0-9.]/}"
+
+    printf '%s - %s\n' "${__NAME__}" "${_version_number}"
+    __license__ "${__DESCRIPTION__}"
+    printf '\nWritten by %s\n' "${__AUTHOR__}"
+}
+
+
+array_join() {
+    local -n _list_reference="${1:?No array reference provided}"
+    local _join_symbol="${2:- }"
+    local _results=''
+    local _element
+    for _element in "${_list_reference[@]}"; do
+        if (( "${#_results}" )); then
+            _results+="${_join_symbol}${_element}"
+        else
+            _results="${_element}"
+        fi
+    done
+    printf '%s\n' "${_results}"
+}
+
+
+## Save passed arguments and acceptable arguments to Bash arrays
+# shellcheck disable=SC2034
+{
+    _passed_args=( "${@:?No arguments provided}" )
+    _acceptable_args=(
+        '--clobber|-c:bool'
+        '--help|-h:bool'
+        '--license|-l:bool'
+        '--verbose|-v:bool'
+        '--version|-V:bool'
+        '--completion-dir:path'
+        '--executable:print'
+        '--help-option:print'
+        '--parameters-pattern:print'
+    )
+}
+
+## Pass arrays by reference/name to the `argument_parser` function
+argument_parser '_passed_args' '_acceptable_args'
+_exit_status="$?"
+
+
+# shellcheck disable=SC2154
+(( _help )) || (( _exit_status )) && {
+    __usage__
+    exit "${_exit_status:-0}"
+}
+
+# shellcheck disable=SC2154
+(( _license )) && {
+    printf '%s\n' "${__DESCRIPTION__}"
+    __license__
+    exit ${_exit_status:-0}
+}
+
+# shellcheck disable=SC2154
+(( _version )) && {
+    __version__
+    exit ${_exit_status:-0}
+}
+
+_executable_name="${_executable##*/}"
+# shellcheck disable=SC2154
+(( "${#_executable_name}" )) || {
+    __usage__ 'No executable name provided'
+}
+
+
+if [[ "${_completion_dir}" =~ /$ ]]; then
+    _completion_dir="${_completion_dir%/*}"
+fi
+
+[[ -d "${_completion_dir}" ]] || {
+    __usage__ 'No completion directory found'
+}
+
+
+_help_option="${_help_option:---help}"
+
+
+build_configurations() {
+    local _function_name
+    _function_name="$(awk '{
+        split($0, _parts, ".");
+        gsub("[^a-zA-Z0-9-]", "", _parts[1]);
+        gsub("-", "_", _parts[1]);
+        print "_" _parts[1];
+    }' <<<"${_executable_name}")"
+
+    local -a _help_parameter_list
+    local _line
+    while read -r _line; do
+        _help_parameter_list+=( "${_line}" )
+    done < <(awk -v _pattern="${_parameter_pattern}" '{
+        if ($0 ~ _pattern) {
+            print $0;
+        } else if ($0 ~ "^Examples") {
+            exit 0;
+        }
+    }' <<<"$("${_executable}" "${_help_option}")")
+
+    local -a _configs=()
+    # shellcheck disable=SC2016
+    _configs+=(
+        "# ${_executable_name} completion" 
+        ''
+        "${_function_name}() {"
+        '    local cur prev words cword split'
+        '    _init_completion || return'
+        ''
+        '    # default completion if parameter looks like a path'
+        '    if [[ "${cur}" == @(*/|[.~])* ]]; then'
+        '        _filedir'
+        '        return'
+        '    fi'
+    )
+
+    local -a _flag_list
+    local -a _filedir_list
+    local -a _value_list
+    local -a _parameter_list
+    local _index
+    for _index in "${!_help_parameter_list[@]}"; do
+        _parameter_list=( ${_help_parameter_list[${_index}]} )
+        case "${_parameter_list[-1]}" in
+            -*)
+                _flag_list+=( "${_parameter_list[@]}" )
+            ;;
+            */*)
+                _filedir_list+=( "${_parameter_list[@]:0:$(( ${#_parameter_list[@]} - 1 ))}" )
+            ;;
+            *)
+                _value_list+=( "${_parameter_list[*]}" )
+            ;;
+        esac
+    done
+
+    # shellcheck disable=SC2016
+    _configs+=(
+        ''
+        '    case "${prev}" in'
+    )
+
+    _configs+=(
+        "        $(array_join '_flag_list' '|'))"
+        '            return'
+        '        ;;'
+    )
+
+    _configs+=(
+        "        $(array_join '_filedir_list' '|'))"
+        '            _filedir'
+        '            return'
+        '        ;;'
+    )
+
+    local _parameters
+    local _values
+    for _index in "${!_value_list[@]}"; do
+        _parameters=( ${_value_list[${_index}]} )
+        _parameter_list=( "${_parameters[@]::$(( ${#_parameters[@]} - 1 ))}" )
+        _values=( $( awk '{
+            gsub("[\"$'\'']", "", $0);
+            gsub("[|]", " ", $0);
+            print $0;
+        }' <<<"${_parameters[-1]}" ) )
+
+        ##
+        # Assume single value to be an executable or literal string
+        #        multiple values to be key-word list
+        #        and anything else to be place-holder
+        if [[ "${#_values[@]}" == 1 ]]; then
+            if [[ -e "${_values[0]}" ]]; then
+                # shellcheck disable=SC2016
+                _configs+=(
+                    "        $(array_join '_parameter_list' '|'))"
+                    '            words=(words[0] "${cur}")'
+                    '            cword=1'
+                    '            _command'
+                    '            return'
+                    '        ;;'
+                )
+            else
+                local _escaped_value
+                _escaped_value="$(awk '{
+                    gsub("\{", "\\{", $0);
+                    print $0;
+                }' <<<"${_values[@]}" 2>/dev/null)"
+
+                # shellcheck disable=SC1083,SC1083
+                _configs+=(
+                    "        $(array_join '_parameter_list' '|'))"
+                    "            COMPREPLY=( \$( compgen -W '${_escaped_value}' -- "\${cur}" ) )"
+                    '            return'
+                    '        ;;'
+                )
+                unset _escaped_value
+            fi
+        elif [[ "${#_values[@]}" -gt 1 ]]; then
+            # shellcheck disable=SC1083,SC1083
+            _configs+=(
+                "        $(array_join '_parameter_list' '|'))"
+                "            COMPREPLY=( \$( compgen -W '$(array_join '_values')' -- "\${cur}" ) )"
+                '            return'
+                '        ;;'
+            )
+        else
+            _configs+=(
+                "        $(array_join '_parameter_list' '|'))"
+                '            return'
+                '        ;;'
+            )
+        fi
+    done
+
+    _configs+=(
+        '    esac'
+    )
+
+    # shellcheck disable=SC2016
+    _configs+=(
+        ''
+        '    # Parse help for any un-matched parameters'
+        '    if [[ ${cur} == -* ]]; then'
+        "        COMPREPLY=( \$( compgen -W '\$( _parse_help \"\${1}\" )' -- \"\${cur}\" ) )"
+        '        [[ ${COMPREPLY} == *= ]] && compopt -o nospace'
+        '        return'
+        '    fi'
+        '} &&'
+        "complete -F ${_function_name} ${_executable_name}"
+        ''
+        '# ex: filetype=bash'
+    )
+
+    printf '%s\n' "${_configs[@]}"
+}
+
+
+write_configurations() {
+    local _completion_path="${_completion_dir}/${_executable_name}"
+
+    [[ -d "${_completion_dir}" ]] || {
+        printf >&2 'No directory found at -> %s\n' "${_completion_dir}"
+        return 1
+    }
+
+    # shellcheck disable=SC2154
+    if [[ -f "${_completion_path}" ]] && ! (( _clobber )); then
+        printf >&2 'Completion configuration already exists -> %s\n' "${_completion_path}"
+        return 1
+    fi
+
+    tee "${_completion_path}" 1>/dev/null <<< "$(build_configurations)"
+}
+
+write_configurations
+
