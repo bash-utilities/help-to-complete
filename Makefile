@@ -253,10 +253,3 @@ list: ## Lists available make commands
 		}
 	}' "$(MAKE_PATH)"
 
-.PHONY: debug
-.SILENT: debug
-debug: SHELL := /bin/bash
-debug: ##
-	echo "COMPLETION_DIR -> $(COMPLETION_DIR)"
-	echo "INSTALL_DIRECTORY -> $(INSTALL_DIRECTORY)"
-
