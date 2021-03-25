@@ -221,7 +221,7 @@ build_configurations() {
     local -a _parameter_list
     local _index
     for _index in "${!_help_parameter_list[@]}"; do
-        _parameter_list=( ${_help_parameter_list[${_index}]} )
+        _parameter_list=( ${_help_parameter_list[${_index}]//=/ } )
         case "${_parameter_list[-1]}" in
             -*)
                 _flag_list+=( "${_parameter_list[@]}" )
@@ -270,7 +270,7 @@ build_configurations() {
         #        multiple values to be key-word list
         #        and anything else to be place-holder
         if [[ "${#_values[@]}" == 1 ]]; then
-            if [[ -e "${_values[0]}" ]]; then
+            if [[ -x "${_values[0]}" ]] || [[ -x "$(which "${_values[0]}")" ]]; then
                 # shellcheck disable=SC2016
                 _configs+=(
                     "        $(array_join '_parameter_list' '|'))"
