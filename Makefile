@@ -102,7 +102,7 @@ GIT_MODULES_PATH := $(call path_append, $(ROOT_DIRECTORY_PATH), .gitmodules)
 #
 #    Make targets and settings
 #
-.ONESHELL: install
+.ONESHELL: install uninstall
 
 .PHONY: clean config install uninstall upgrade git-pull link-script unlink-script man link-manual unlink-manual completion link-completion unlink-completion list
 .SILENT: clean config install uninstall upgrade git-pull link-script unlink-script man link-manual unlink-manual completion link-completion unlink-completion list
@@ -127,10 +127,10 @@ config: ## Writes configuration file
 	COMPLETION_DIR = $(COMPLETION_DIR)
 	EOF
 
-install: ## Runs targets -> link-script link-manual
+install: ## Runs targets -> link-script link-manual link-completion
 install: | link-script link-manual link-completion
 
-uninstall: ## Runs targets -> unlink-script unlink-manual
+uninstall: ## Runs targets -> unlink-script unlink-manual unlink-completion
 uninstall: | unlink-script unlink-manual unlink-completion
 
 upgrade: ## Runs targets -> uninstall git-pull install
