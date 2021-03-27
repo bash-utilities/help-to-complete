@@ -93,11 +93,11 @@ EOF
 __version__() {
     local _version_number
     _version_number="$(git tag --list v* | tail -n1)"
-    _version_number="${_version_number:-v0.0.1}"
+    _version_number="${_version_number:-v0.1.0}"
     _version_number="${_version_number//[^0-9.]/}"
 
     printf '%s - %s\n' "${__NAME__}" "${_version_number}"
-    __license__ "${__DESCRIPTION__}"
+    __license__ "${__AUTHOR__}"
     printf '\nWritten by %s\n' "${__AUTHOR__}"
 }
 
