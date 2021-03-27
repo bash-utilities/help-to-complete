@@ -27,7 +27,7 @@ path_append = $(strip $(1))$(strip $(__PATH_SEPARATOR__))$(strip $(2))
 #    Make variables to satisfy conventions
 #
 NAME = help-to-complete
-VERSION = 0.0.1
+VERSION = 0.1.0
 PKG_NAME = $(NAME)-$(VERSION)
 
 
@@ -79,7 +79,7 @@ ROOT_DIRECTORY_NAME := $(notdir $(patsubst %$(__PATH_SEPARATOR__),%,$(ROOT_DIREC
 #
 #    Override variables via optional configuration file
 #
-CONFIG_PATH := $(call path_append, $(ROOT_DIRECTORY_PATH), .make-config)
+CONFIG_PATH := $(call path_append, $(ROOT_DIRECTORY_PATH), .config-make)
 ifneq ("$(wildcard $(CONFIG_PATH))", "")
 	include $(CONFIG_PATH)
 endif
