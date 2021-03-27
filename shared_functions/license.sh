@@ -1,10 +1,8 @@
 __license__(){
-    __DESCRIPTION__="${1}"
-    __AUTHOR__="${2:-S0AndS0}"
+    __AUTHOR__="${1:-S0AndS0}"
     _year="$(date +'%Y')"
     cat <<EOF
-${__DESCRIPTION__}
-Copyright (C) ${_year:-2020} ${__AUTHOR__}
+Copyright (C) ${_year} ${__AUTHOR__}
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published
